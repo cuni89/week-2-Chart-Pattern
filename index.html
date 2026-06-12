@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <title>Pemain Pembelajaran Estel - Auto-Scroll YouTube Edition</title>
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; height: 100vh; background: #0f051d; color: #fff; box-sizing: border-box; }
+        
+        .wrapper { width: 100%; max-width: 1600px; margin: 0 auto; padding: 20px; display: flex; gap: 20px; box-sizing: border-box; height: 100vh; }
+        
+        /* Kiri: Video & Chapters */
+        .player-container { flex: 2.3; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; background: #000; padding: 15px; border-radius: 8px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        
+        .video-frame-container { width: 100%; height: 68vh; border-radius: 6px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.8); background: #000; min-height: 380px; }
+        #ytPlayer { width: 100%; height: 100%; border: none; }
+        
+        /* Panel Kawalan Status */
+        .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; background: #1f1133; padding: 12px; border-radius: 6px; border: 1px solid #7c3aed; width: 100%; box-sizing: border-box; }
+        .autoscroll-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; color: #f59e0b; cursor: pointer; }
+        .status-badge { font-size: 11px; background: #16a34a; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
+
+        /* Kanan: Transkrip Interaktif */
+        .sidebar { flex: 1; display: flex; flex-direction: column; border-left: 1px solid #2e0854; background: #150a21; padding: 15px; overflow-y: auto; height: 100%; box-sizing: border-box; border-radius: 8px; }
+        h3 { margin-top: 0; color: #f59e0b; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 1px solid #7c3aed; padding-bottom: 5px; position: sticky; top: 0; background: #150a21; z-index: 10; }
+        .list-viewport { flex: 1; overflow-y: auto; width: 100%; }
+        
+        .transcript-line { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; font-size: 13px; line-height: 1.45; transition: all 0.2s ease; border-left: 3px solid transparent; word-wrap: break-word; }
+        .transcript-line:hover { background: #2e0854; color: #f59e0b; }
+        .transcript-line.active { background: rgba(124, 58, 237, 0.35); color: #ffffff; font-weight: bold; border-left: 3px solid #f59e0b; border-radius: 0 4px 4px 0; }
+        .timestamp { color: #38bdf8; font-weight: bold; margin-right: 8px; font-size: 11px; font-family: monospace; }
+        
+        /* KARUSEL SMART CHAPTERS */
+        .chapters-section { width: 100%; margin-top: 15px; border-top: 1px solid #2e0854; padding-top: 15px; box-sizing: border-box; }
+        .chapters-section h4 { margin: 0 0 10px 0; color: #f59e0b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .chapters-track { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; width: 100%; scroll-behavior: smooth; }
+        .chapter-card { flex: 0 0 210px; background: #150a21; border: 1px solid #2e0854; border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; box-sizing: border-box; }
+        .chapter-card:hover { background: #1f1133; border-color: #7c3aed; }
+        
+        .chapter-card.active { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b; font-weight: bold; box-shadow: 0 0 8px rgba(245,158,11,0.2); }
+        .card-time { font-size: 11px; color: #38bdf8; margin-bottom: 3px; font-family: monospace; }
+        .chapter-card.active .card-time { color: #f59e0b; }
+        .card-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .chapter-desc-display { background: #150a21; border: 1px solid #2e0854; border-radius: 6px; padding: 12px; margin-top: 12px; font-size: 12.5px; color: #cbd5e1; line-height: 1.5; text-align: justify; width: 100%; box-sizing: border-box; min-height: 60px; }
+        .loading-text { font-style: italic; color: #9ca3af; font-size: 12px; padding: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <div class="player-container">
+        <div class="controls">
+            <label class="autoscroll-toggle">
+                <input type="checkbox" id="autoScrollCheck" checked> Sistem Auto-Scroll YouTube Aktif
+            </label>
+            <div class="status-badge" style="background: #ef4444;">YOUTUBE API LIVE</div>
+        </div>
+        
+        <!-- Wadah rasmi iFrame pemain YouTube API -->
+        <div class="video-frame-container">
+            <div id="ytPlayer"></div>
+        </div>
+
+        <div class="chapters-section">
+            <h4>Smart Chapters</h4>
+            <div class="chapters-track" id="chaptersTrack">
+                <div class="loading-text">Memuatkan data bab kuliah...</div>
+            </div>
+            <div class="chapter-desc-display" id="chapterDescDisplay">
+                <span style="color: #64748b; font-style: italic;">Penerangan ringkasan topik bab akan dikemas kini di sini...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <h3>Transkrip Interaktif</h3>
+        <div id="transcriptContainer" class="list-viewport">
+            <div class="loading-text">Memuatkan data transkrip teks...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Muatkan pustaka pengawal rasmi iFrame Player YouTube API -->
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+    // ID Video yang sudah dikunci mengikut pautan YouTube anda
+    const YOUTUBE_VIDEO_ID = "qQkP1vPVHlQ";
+
+    const URL_TRANSCRIPT_RAW = "https://gist.githubusercontent.com/cuni89/38f0a5a4cb2a6e62231adfe411cc4ad3/raw/cb7a9c457d0b875c432bf47e830d300ea18f500a/gistfile1.txt";
+    const URL_CHAPTERS_RAW = "https://gist.githubusercontent.com/cuni89/59f290a0ff38f19dcd2affb33890c239/raw/202d6f5268993c359418e1f55655cdd4b59d17bc/gistfile1.txt";
+
+    const transcriptContainer = document.getElementById('transcriptContainer');
+    const chaptersTrack = document.getElementById('chaptersTrack');
+    const chapterDescDisplay = document.getElementById('chapterDescDisplay');
+    const autoScrollCheck = document.getElementById('autoScrollCheck');
+
+    let player;
+    let transcriptData = [];
+    let chaptersData = [];
+    let lastTrackedChapter = null;
+    let updateInterval;
+
+    // Fungsi automatik yang dicetuskan oleh pustaka YouTube API untuk membina objek player
+    function onYouTubeIframeAPIReady() {
+        player = new YT.Player('ytPlayer', {
+            videoId: YOUTUBE_VIDEO_ID,
+            playerVars: {
+                'autoplay': 0,
+                'controls': 1,
+                'rel': 0,
+                'showinfo': 0
+            },
+            events: {
+                'onReady': onPlayerReady,
+                'onStateChange': onPlayerStateChange
+            }
+        });
+    }
+
+    function onPlayerReady(event) {
+        // Ambil data Bab
+        fetch(URL_CHAPTERS_RAW)
+            .then(res => res.text())
+            .then(text => parseChapters(text))
+            .catch(() => { chaptersTrack.innerHTML = '<div style="color:#ef4444" class="loading-text">Gagal memuatkan bab.</div>'; });
+
+        // Ambil data Transkrip
+        fetch(URL_TRANSCRIPT_RAW)
+            .then(res => res.text())
+            .then(text => parseVTT(text))
+            .catch(() => { transcriptContainer.innerHTML = '<div style="color:#ef4444" class="loading-text">Gagal memuatkan transkrip.</div>'; });
+    }
+
+    // Mengawal pemasa tracker mengikut status aktif video YouTube
+    function onPlayerStateChange(event) {
+        if (event.data == YT.PlayerState.PLAYING) {
+            updateInterval = setInterval(checkVideoTime, 250); // Semak masa setiap suku saat untuk kelancaran
+        } else {
+            clearInterval(updateInterval);
+        }
+    }
+
+    function checkVideoTime() {
+        if (!player || typeof player.getCurrentTime !== 'function') return;
+        const currentTime = player.getCurrentTime();
+
+        // 1. Pergerakan Auto-Scroll & Highlight Transkrip
+        let activeLine = null;
+        transcriptData.forEach(item => {
+            if (currentTime >= item.start && currentTime <= item.end) {
+                item.element.classList.add('active');
+                activeLine = item.element;
+            } else { item.element.classList.remove('active'); }
+        });
+        if (activeLine && autoScrollCheck.checked) {
+            activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // 2. Pergerakan Auto-Scroll & Highlight Bab
+        let activeChapter = null;
+        for (let i = 0; i < chaptersData.length; i++) {
+            const currentChap = chaptersData[i];
+            const nextChap = chaptersData[i + 1];
+            if (currentTime >= currentChap.start && (!nextChap || currentTime < nextChap.start)) {
+                currentChap.element.classList.add('active');
+                activeChapter = currentChap;
+            } else { currentChap.element.classList.remove('active'); }
+        }
+        if (activeChapter) {
+            if (lastTrackedChapter !== activeChapter) {
+                displayChapterDesc(activeChapter);
+                lastTrackedChapter = activeChapter;
+            }
+            if (autoScrollCheck.checked) {
+                const track = chaptersTrack;
+                const card = activeChapter.element;
+                const targetScroll = card.offsetLeft - (track.offsetWidth / 2) + (card.offsetWidth / 2);
+                track.scrollTo({ left: targetScroll, behavior: 'smooth' });
+            }
+        }
+    }
+
+    function timeToSeconds(timeStr) {
+        const parts = timeStr.trim().split(':');
+        let seconds = 0;
+        if (parts.length === 3) seconds = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+        else if (parts.length === 2) seconds = parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+        return seconds;
+    }
+
+    function parseChapters(text) {
+        chaptersTrack.innerHTML = '';
+        chaptersData = [];
+        const lines = text.split('\n');
+        let currentChapter = null;
+        
+        lines.forEach(line => {
+            const match = line.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
+            if (match) {
+                if (currentChapter) chaptersData.push(currentChapter);
+                const timestamp = match[1];
+                let title = line.replace(timestamp, '').replace(/From/i, '').replace(/[-—:]/, '').trim();
+                currentChapter = { timestamp: timestamp, start: timeToSeconds(timestamp), title: title || 'Bab Tanpa Tajuk', summaryLines: [] };
+            } else if (currentChapter && line.trim()) {
+                currentChapter.summaryLines.push(line.trim());
+            }
+        });
+        if (currentChapter) chaptersData.push(currentChapter);
+        chaptersData.sort((a, b) => a.start - b.start);
+
+        chaptersData.forEach(chap => {
+            const div = document.createElement('div');
+            div.className = 'chapter-card';
+            div.innerHTML = `<div class="card-time">From ${chap.timestamp}</div><div class="card-title">${chap.title}</div>`;
+            div.addEventListener('click', () => {
+                player.seekTo(chap.start, true);
+                displayChapterDesc(chap);
+            });
+            chap.element = div;
+            chaptersTrack.appendChild(div);
+        });
+    }
+
+    function displayChapterDesc(chap) {
+        if (chap) {
+            const bodyText = chap.summaryLines.join('<br>') || '<span style="color: #64748b; font-style: italic;">(Tiada perenggan ringkasan)</span>';
+            chapterDescDisplay.innerHTML = `<div style="font-weight:bold; color:#f59e0b; margin-bottom:4px; font-size:13px; text-transform:uppercase;">${chap.title}</div><div style="color:#cbd5e1;">${bodyText}</div>`;
+        }
+    }
+
+    function parseVTT(text) {
+        transcriptContainer.innerHTML = '';
+        transcriptData = [];
+        const blocks = text.split(/\n\s*\n/);
+        
+        blocks.forEach(block => {
+            const lines = block.trim().split('\n');
+            let timeLine = "";
+            let textLines = [];
+            if (lines.length >= 2 && lines[0].includes('-->')) { timeLine = lines[0]; textLines = lines.slice(1); }
+            else if (lines.length >= 3 && lines[1].includes('-->')) { timeLine = lines[1]; textLines = lines.slice(2); }
+
+            if (timeLine) {
+                const timeParts = timeLine.split('-->');
+                const startSec = timeToSeconds(timeParts[0]);
+                const endSec = timeToSeconds(timeParts[1]);
+                const textContent = textLines.join(' ').trim();
+                const displayTime = timeParts[0].split('.')[0].trim();
+
+                if (textContent) {
+                    const div = document.createElement('div');
+                    div.className = 'transcript-line';
+                    div.innerHTML = `<span class="timestamp">[${displayTime}]</span> <span>${textContent}</span>`;
+                    div.addEventListener('click', () => {
+                        player.seekTo(startSec, true);
+                    });
+                    transcriptContainer.appendChild(div);
+                    transcriptData.push({ start: startSec, end: endSec, element: div });
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
